@@ -3,291 +3,213 @@ import re
 import asyncio
 import string
 import argparse
+import logging
 from dotenv import load_dotenv
 from pyairtable import Api
+from pyairtable.formulas import match, OR
 
 from tools.get_website_async import get_website_async
-from tools.get_website_text_only_async import get_website_text_only_async
 from tools.crop_image import crop_image_async
 from tools.simple_ai_async import get_ai_response_async
 
 # Parse command line arguments
 parser = argparse.ArgumentParser(description="Airtable Async Website Processor")
-parser.add_argument("--gif", action="store_true", help="Enable GIF creation for all processed websites")
+parser.add_argument("--debug", action="store_true", help="Enable GIF creation for all processed websites")
 args = parser.parse_args()
 
-# Global flag for GIF creation
-ENABLE_GIFS = args.gif
+DEBUG = args.debug
 
 # Load environment variables
 load_dotenv()
-
-# Airtable Configuration
 AIRTABLE_API_KEY = os.getenv("AIRTABLE_API_KEY")
 AIRTABLE_BASE_ID = os.getenv("AIRTABLE_BASE_ID")
 AIRTABLE_TABLE_NAME = os.getenv("AIRTABLE_TABLE_NAME")
 
 airtable_api = Api(AIRTABLE_API_KEY)
 
+def setup_logging(debug: bool = False):
+    """Configure logging"""
+    level = logging.DEBUG if debug else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+
 async def process_row(row, table, semaphore):
-    """Process a single Airtable row asynchronously"""
     row_id = row["id"]
     fields = row.get("fields", {})
     url = fields.get("URL", "No URL")
     pricing_url = fields.get("Pricing URL", None)
     status = fields.get("Status", "Unknown")
 
-    # Create directories if they don't exist
-    for dir_path in ["screenshots"]:
-        if not os.path.exists(dir_path):
-            os.makedirs(dir_path)
-
-    # Define consistent file paths based on row_id
-    screenshot_path = f"screenshots/{row_id}.png"
-
-    async with semaphore:  # Limit concurrent tasks
+    async with semaphore:
         try:
-            if all([status == "Todo", url]):
-                print(f"🚀 Starting website processing for {url}")
-                await update_table(table, row_id, {"Status": "In progress"})
-                print(f"⏳ Updated status to 'In progress' for {url}")
-
-                # Get website data asynchronously
-                print(f"📥 Fetching website data for {url}...")
-
-                try:
-                    image_path, title, h1, description, page_text = await get_website_async(
-                        url,
-                        name=row_id
-                    )
-
-                    # Update paths if returned paths are different
-                    if image_path != screenshot_path:
-                        print(f"ℹ️ Screenshot path changed from {screenshot_path} to {image_path}")
-                        screenshot_path = image_path
-
-                    print(f"✅ Website data fetched for {url}\tTitle: {title[:50]}..." if title and len(title) > 50 else f"🔤 Title: {title}")
-
-                    # Handle screenshot
-                    if "Screenshot" not in fields:
-                        print(f"🖼️ Cropping screenshot for {url}...")
-                        await crop_image_async(screenshot_path, screenshot_path)
-                        print(f"📤 Uploading screenshot to Airtable for {url}..., {screenshot_path=}")
-                        await upload_attachment(table, row_id, "Screenshot", screenshot_path)
-                        print(f"✅ Screenshot uploaded for {url}")
-
-                    # Update the fields
-                    print(f"📝 Updating fields in Airtable for {url}...")
-                    updates = {
-                        "Title": title,
-                        "H1": h1,
-                        "Meta Description": description,
-                        "URL Content": page_text,
-                        "Status": "Toai"
-                    }
-
-                    await update_table(table, row_id, updates)
-                    print(f"✅ Fields updated for {url}, status set to 'Toai'")
-
-                    if pricing_url:
-                        pricing_page_text = await get_website_text_only_async(pricing_url)
-                        await update_table(table, row_id, {"Pricing URL Content": pricing_page_text})
-
-                except Exception as e:
-                    print(f"❌ Error processing website data for {url}: {e}")
-                    # Clean up files in case of error
-                    for path in [screenshot_path]:
-                        if os.path.exists(path):
-                            try:
-                                os.remove(path)
-                                print(f"🗑️ Cleaned up file after error: {path}")
-                            except:
-                                pass
-
-                    # Update status to indicate error
-                    await update_table(table, row_id, {"Status": "Error"})
-                    print(f"⚠️ Status set to 'Error' for {url}")
-                    raise  # Re-raise so the outer try/except can log it
-
+            if status == "Todo" and url:
+                await handle_website(row, table, row_id, url, fields, pricing_url)
             elif status == "Toai":
-                print(f"🤖 Starting AI processing for row {row_id}")
-                try:
-                    print(f"📚 Getting AI fields and prompts from table schema...")
-                    schema = await get_table_schema(table)
-
-                    ai_tasks = []
-                    ai_field_names = []
-                    ai_field_count = 0
-
-                    for this_field in schema.fields:
-                        if all([this_field.name.startswith("AI"), this_field.name not in fields]):
-                            ai_field_count += 1
-                            this_field_description = schema.field(this_field.name).description
-                            print(f"🧠 Preparing AI prompt for field: {this_field.name}")
-
-                            placeholders = re.findall(r'{([^{}]+)}', this_field_description)
-
-                            # Convert standard format to Template format
-                            template_str_converted = re.sub(r'{([^{}]+)}', r'${\1}', this_field_description)
-
-                            # Create a modified fields dictionary with underscores instead of spaces in keys
-                            modified_fields = {}
-                            for key, value in fields.items():
-                                # Add both the original key and a version with spaces replaced by underscores
-                                modified_fields[key] = value
-                                if ' ' in key:
-                                    modified_fields[key.replace(' ', '_')] = value
-
-                            # Also handle spaces in the template placeholders
-                            for placeholder in placeholders:
-                                if ' ' in placeholder:
-                                    template_str_converted = template_str_converted.replace(
-                                        '${' + placeholder + '}',
-                                        '${' + placeholder.replace(' ', '_') + '}'
-                                    )
-
-                            template = string.Template(template_str_converted)
-                            prompt = template.safe_substitute(modified_fields)
-                            print(f"📋 Generated prompt for {this_field.name} ({len(prompt)} chars)")
-
-                            # Create async task for AI response
-                            ai_tasks.append(get_ai_response_async(prompt))
-                            ai_field_names.append(this_field.name)
-
-                    # Process all AI requests concurrently
-                    if ai_tasks:
-                        print(f"⚡ Processing {len(ai_tasks)} AI requests in parallel...")
-                        ai_responses = await asyncio.gather(*ai_tasks)
-                        print(f"✅ All AI responses received")
-
-                        # Update each field with its corresponding response
-                        for field_name, response in zip(ai_field_names, ai_responses):
-                            if response:
-                                print(f"📝 Updating field '{field_name}' with AI response ({len(response)} chars)")
-                                await update_table(table, row_id, {field_name: response})
-                            else:
-                                print(f"⚠️ No response for field '{field_name}'")
-                    else:
-                        print(f"ℹ️ No AI fields to process for row {row_id}")
-
-                    print(f"🏁 Setting status to 'Done' for row {row_id}")
-                    await update_table(table, row_id, {"Status": "Done"})
-                    print(f"✅ Row {row_id} completed successfully")
-
-                except Exception as e:
-                    print(f"❌ Error processing AI for row {row_id}: {e}")
-
-            # else:
-                # print(f"⏭️ Skipping row {row_id} - Status: {status}")
+                await handle_ai_processing(table, row_id, fields)
 
         except Exception as e:
-            print(f"❌ Error processing row {row_id}: {e}")
+            logging.info(f"❌ Error processing row {row_id}: {e}")
             import traceback
-            traceback.print_exc()  # Print the full stack trace
+            traceback.print_exc()
 
-        finally:
-            # Final cleanup - ensure files are removed if they exist
-            if "Status" in fields and fields["Status"] in ["Done", "Error"]:
-                for path in [screenshot_path]:  # Only delete video, keep screenshots and GIFs
-                    if os.path.exists(path):
-                        try:
-                            os.remove(path)
-                            print(f"🗑️ Final cleanup: Deleted {path}")
-                        except Exception as cleanup_error:
-                            print(f"⚠️ Could not delete {path} during cleanup: {cleanup_error}")
+async def handle_website(row, table, row_id, url, fields, pricing_url):
+    screenshot_path = f"screenshots/{row_id}.png"
+    os.makedirs("screenshots", exist_ok=True)
+
+    await update_table(table, row_id, {"Status": "In progress"})
+    try:
+        image_path, title, h1, description, page_text = await get_website_async(url, name=row_id)
+        if image_path != screenshot_path:
+            screenshot_path = image_path
+        logging.info(f"✅ Website data fetched for {url}, Title: {title[:50]}..." if title and len(title) > 50 else f"🔤 Title: {title}")
+
+        await crop_image_async(screenshot_path, screenshot_path)
+        await upload_attachment(table, row_id, "Screenshot", screenshot_path)
+
+        updates = {
+            "Title": title,
+            "H1": h1,
+            "Meta Description": description,
+            "URL Content": page_text,
+            "Status": "Toai"
+        }
+
+        await update_table(table, row_id, updates)
+
+        if pricing_url:
+            image_path, title, h1, description, pricing_page_text = await get_website_async(pricing_url, name=row_id)
+            await update_table(table, row_id, {"Pricing URL Content": pricing_page_text})
+
+    except Exception as e:
+        handle_error(row, table, row_id, screenshot_path, e)
+
+async def handle_ai_processing(table, row_id, fields):
+    logging.info(f"🤖 Starting AI processing for row {row_id}")
+    try:
+        schema = await get_table_schema(table)
+        ai_tasks, ai_field_names = [], []
+
+        for field in schema.fields:
+            if field.name.startswith("AI") and field.name not in fields:
+                description = schema.field(field.name).description
+                placeholders = re.findall(r'{([^{}]+)}', description)
+                template_str_converted = re.sub(r'{([^{}]+)}', r'${\1}', description)
+
+                modified_fields = {key: value for key, value in fields.items()}
+                for placeholder in placeholders:
+                    if ' ' in placeholder:
+                        template_str_converted = template_str_converted.replace(
+                            '${' + placeholder + '}',
+                            '${' + placeholder.replace(' ', '_') + '}'
+                        )
+
+                template = string.Template(template_str_converted)
+                prompt = template.safe_substitute(modified_fields)
+
+                ai_tasks.append(get_ai_response_async(prompt))
+                ai_field_names.append(field.name)
+
+        if ai_tasks:
+            logging.info(f"⚡ Processing {len(ai_tasks)} AI requests in parallel...")
+            ai_responses = await asyncio.gather(*ai_tasks)
+            logging.info(f"✅ All AI responses received")
+
+            for field_name, response in zip(ai_field_names, ai_responses):
+                if response:
+                    await update_table(table, row_id, {field_name: response})
+                else:
+                    logging.info(f"⚠️ No response for field '{field_name}'")
+
+        logging.info(f"🏁 Setting status to 'Done' for row {row_id}")
+        await update_table(table, row_id, {"Status": "Done"})
+    except Exception as e:
+        logging.error(f"❌ Error processing AI for row {row_id}: {e}")
+
+def handle_error(row, table, row_id, screenshot_path, error):
+    logging.info(f"❌ Error processing website data: {error}")
+    if os.path.exists(screenshot_path):
+        try:
+            os.remove(screenshot_path)
+            logging.info(f"🗑️ Cleaned up file after error: {screenshot_path}")
+        except:
+            pass
+    raise
 
 # Helper functions to make Airtable operations awaitable
 async def get_all_rows(table):
-    """Get all rows from the Airtable table"""
-    print("📊 Fetching all rows from Airtable...")
-    # Run in a separate thread since pyairtable is not async
     loop = asyncio.get_event_loop()
-    rows = await loop.run_in_executor(None, table.all)
-    print(f"📋 Retrieved {len(rows)} rows from Airtable")
+    # rows = await loop.run_in_executor(None, table.all)
+    formula = OR(match({"Status": "Todo"}), match({"Status": "Toai"}))
+    rows = await loop.run_in_executor(None, lambda: table.all(formula=formula))
     return rows
 
 async def update_table(table, row_id, fields):
-    """Update Airtable row asynchronously"""
     loop = asyncio.get_event_loop()
     result = await loop.run_in_executor(None, lambda: table.update(row_id, fields))
     return result
 
 async def upload_attachment(table, row_id, field_name, file_path):
-    """Upload attachment to Airtable asynchronously"""
     loop = asyncio.get_event_loop()
     result = await loop.run_in_executor(None, lambda: table.upload_attachment(row_id, field_name, file_path))
     return result
 
 async def get_table_schema(table):
-    """Get the table schema asynchronously"""
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, table.schema)
 
 async def main_async():
-    """Main async function to process all rows"""
-    print("\n🔄 Starting new processing cycle")
-    print("="*60)
+    logging.info("\n🔄 Starting new processing cycle")
+    logging.info("="*60)
 
     table = airtable_api.table(AIRTABLE_BASE_ID, AIRTABLE_TABLE_NAME)
-
-    # Get all rows
     rows = await get_all_rows(table)
 
-    # Count rows by status
-    status_counts = {}
-    for row in rows:
-        status = row.get("fields", {}).get("Status", "Unknown")
-        status_counts[status] = status_counts.get(status, 0) + 1
+    status_counts = {status: sum(1 for row in rows if row.get("fields", {}).get("Status") == status) for status in set(row.get("fields", {}).get("Status", "Unknown") for row in rows)}
+    logging.info(f"📊 Status breakdown: {status_counts}")
 
-    print(f"📊 Status breakdown: {status_counts}")
-
-    # Create a semaphore to limit concurrent executions
-    semaphore = asyncio.Semaphore(3)  # Process up to 3 rows at a time
-    print(f"⚙️ Using concurrency limit of 3 simultaneous tasks")
-
-    # Create tasks for each row
+    semaphore = asyncio.Semaphore(3)
     tasks = [process_row(row, table, semaphore) for row in rows]
 
     if tasks:
-        print(f"🚀 Starting processing of {len(tasks)} rows...")
-        # Run all tasks concurrently and wait for them to complete
+        logging.info(f"🚀 Starting processing of {len(tasks)} rows...")
         await asyncio.gather(*tasks)
-        print(f"✅ All {len(tasks)} rows processed")
+        logging.info(f"✅ All {len(tasks)} rows processed")
     else:
-        print("ℹ️ No rows to process")
+        logging.info("ℹ️ No rows to process")
 
-    print("="*60)
-    print("🏁 Processing cycle complete\n")
+    logging.info("="*60)
+    logging.info("🏁 Processing cycle complete\n")
 
 async def run_continuously():
-    """Run the main function in a continuous loop with a pause between iterations"""
-    print("🔄 Starting continuous processing loop")
+    logging.info("🔄 Starting continuous processing loop")
     while True:
         try:
             await main_async()
         except Exception as e:
-            print(f"❌ Error in main processing cycle: {e}")
+            logging.info(f"❌ Error in main processing cycle: {e}")
             import traceback
             traceback.print_exc()
 
-        print("⏳ Waiting before next cycle...")
-        await asyncio.sleep(5)  # Wait 5 seconds before checking again
+        logging.info("⏳ Waiting before next cycle...")
+        await asyncio.sleep(5)
 
-# Main entry point
 if __name__ == "__main__":
-    print("🚀 Starting Airtable Async Processor")
-    print("="*60)
-    print(f"📋 Using table: {AIRTABLE_TABLE_NAME}")
-    print(f"⏱️ Check interval: 5 seconds")
-    print(f"🔄 Concurrency: 3 simultaneous rows")
-    print(f"🎬 GIF creation: {'Enabled' if ENABLE_GIFS else 'Disabled'}")
-    print("="*60)
+    setup_logging(debug=DEBUG)
+    logging.info("🚀 Starting Airtable Async Processor")
+    logging.info("="*60)
+    logging.info(f"📋 Using table: {AIRTABLE_TABLE_NAME}")
+    logging.info(f"⏱️ Check interval: 5 seconds")
+    logging.info(f"🔄 Concurrency: 3 simultaneous rows")
+    logging.info("="*60)
 
     try:
         asyncio.run(run_continuously())
     except KeyboardInterrupt:
-        print("\n🛑 Process interrupted by user. Shutting down...")
+        logging.info("\n🛑 Process interrupted by user. Shutting down...")
     except Exception as e:
-        print(f"\n❌ Fatal error: {e}")
+        logging.info(f"\n❌ Fatal error: {e}")
         import traceback
         traceback.print_exc()
