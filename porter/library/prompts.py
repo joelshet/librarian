@@ -1,5 +1,5 @@
 prompt_library={
-    "AI_SUMMARY":"""
+    "AI_DESCRIPTION":"""
     **You are an expert copywriter, specifically skilled at translating website and marketing information into simple, friendly, and natural language.** You excel at explaining concepts clearly and briefly, as if talking to a friend.
 
     **Your Task:**
@@ -49,4 +49,20 @@ prompt_library={
 
     Generate the summary now, remembering to sound like a friendly explanation based only on the provided text:
     """,
+    "AI_SUMMARY": """
+    Write a description of the AI company that is less than 100 characters.
+    Here are some inputs you can use to write your description:
+    - Website Title: {Title}
+    - Website Name: {Name}
+    - Website H1: {H1}
+    - Website: {URL}
+    - Meta description: {Description}
+    Do not use marketing speak or jargon. Keep your description simple describing what it is.
+    For example, a bad description would be: "Your 24/7 research agents to capture every interaction in the digital universe".
+    A good description would be: "Research agents that capture interactions".
+    Another example of a bad description is: "A better way to do GTM." That is marketing speak, not an unbiased description of what the product is.
+    Another example of a bad description is: "Helps you sell more". Don't tell me what it helps you do. Tell me what it is.
+    Another bad example: "Makes data-driven decisions for retail and e-commerce." Don't tell me what it does. Tell me what it is.
+
+    Do not start your descriptions with "AI company...". Everyone already knows it's an AI company. The goal is to describe what their product is."""
 }
