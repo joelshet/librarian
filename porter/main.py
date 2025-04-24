@@ -27,6 +27,11 @@ AIRTABLE_TABLE_NAME = os.getenv("AIRTABLE_TABLE_NAME")
 
 airtable_api = Api(AIRTABLE_API_KEY)
 
+# Load configuration variables
+CONCURRENCY = int(os.getenv("PROCESSING_CONCURRENCY", 3))
+SLEEP_INTERVAL = int(os.getenv("PROCESSING_INTERVAL_SECONDS", 5))
+SCREENSHOT_DIR = os.getenv("SCREENSHOT_DIR", "screenshots")
+
 def setup_logging(debug: bool = False):
     """Configure logging"""
     level = logging.DEBUG if debug else logging.INFO
@@ -77,11 +82,11 @@ async def handle_website(row, table, row_id, url, fields, pricing_url):
             "Status": "Toai"
         }
 
-        await update_table(table, row_id, updates)
-
         if pricing_url:
             image_path, title, h1, description, pricing_page_text = await get_website_async(pricing_url, name=row_id)
-            await update_table(table, row_id, {"Pricing URL Content": pricing_page_text})
+            updates["Pricing URL Content"] = pricing_page_text
+
+        await update_table(table, row_id, updates)
 
     except Exception as e:
         handle_error(row, table, row_id, screenshot_path, e)
@@ -139,7 +144,7 @@ def handle_error(row, table, row_id, screenshot_path, error):
     raise
 
 # Helper functions to make Airtable operations awaitable
-async def get_all_rows(table):
+async def get_rows_to_process(table):
     loop = asyncio.get_event_loop()
     # rows = await loop.run_in_executor(None, table.all)
     formula = OR(match({"Status": "Todo"}), match({"Status": "Toai"}))
@@ -165,7 +170,8 @@ async def main_async():
     logging.info("="*60)
 
     table = airtable_api.table(AIRTABLE_BASE_ID, AIRTABLE_TABLE_NAME)
-    rows = await get_all_rows(table)
+    rows = await get_rows_to_process(table)
+    logging.info(f"📊 Found {len(rows)} rows with status 'Todo' or 'Toai'.")
 
     status_counts = {status: sum(1 for row in rows if row.get("fields", {}).get("Status") == status) for status in set(row.get("fields", {}).get("Status", "Unknown") for row in rows)}
     logging.info(f"📊 Status breakdown: {status_counts}")
