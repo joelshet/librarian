@@ -74,6 +74,15 @@ async def handle_website(row, table, row_id, url, fields, pricing_url):
         await crop_image_async(screenshot_path, screenshot_path)
         await upload_attachment(table, row_id, "Screenshot", screenshot_path)
 
+        if os.path.exists(screenshot_path):
+            try:
+                os.remove(screenshot_path)
+                logging.info(f"🗑️ Deleted local screenshot after successful upload: {screenshot_path}")
+            except Exception as e:
+                logging.error(f"🔥 Failed to delete screenshot {screenshot_path} after upload: {e}")
+
+        logging.info(f"📎 Screenshot uploaded for {row_id} from {screenshot_path}")
+
         updates = {
             "Title": title,
             "H1": h1,
