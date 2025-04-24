@@ -6,11 +6,10 @@ import argparse
 from dotenv import load_dotenv
 from pyairtable import Api
 
-from get_website_async import get_website_async
-from get_website_text_only_async import get_website_text_only_async
-from crop_image import crop_image_async
-from movie_to_gif import crop_and_convert_to_gif_async
-from simple_ai_async import get_ai_response_async
+from tools.get_website_async import get_website_async
+from tools.get_website_text_only_async import get_website_text_only_async
+from tools.crop_image import crop_image_async
+from tools.simple_ai_async import get_ai_response_async
 
 # Parse command line arguments
 parser = argparse.ArgumentParser(description="Airtable Async Website Processor")
@@ -39,14 +38,12 @@ async def process_row(row, table, semaphore):
     status = fields.get("Status", "Unknown")
 
     # Create directories if they don't exist
-    for dir_path in ["videos", "screenshots", "gifs"]:
+    for dir_path in ["screenshots"]:
         if not os.path.exists(dir_path):
             os.makedirs(dir_path)
 
     # Define consistent file paths based on row_id
-    video_path = f"videos/{row_id}.webm"
     screenshot_path = f"screenshots/{row_id}.png"
-    gif_path = f"gifs/{row_id}.gif"
 
     async with semaphore:  # Limit concurrent tasks
         try:
@@ -55,18 +52,13 @@ async def process_row(row, table, semaphore):
                 await update_table(table, row_id, {"Status": "In progress"})
                 print(f"⏳ Updated status to 'In progress' for {url}")
 
-                # Determine if we should record video for GIF creation
-                should_record_video = ENABLE_GIFS and "GIF" not in fields
-                print(f"🎬 Video recording: {'Enabled' if should_record_video else 'Disabled'}")
-
                 # Get website data asynchronously
                 print(f"📥 Fetching website data for {url}...")
 
                 try:
-                    video_path, image_path, title, h1, description, page_text = await get_website_async(
+                    image_path, title, h1, description, page_text = await get_website_async(
                         url,
-                        name=row_id,
-                        GIF=should_record_video
+                        name=row_id
                     )
 
                     # Update paths if returned paths are different
@@ -84,55 +76,27 @@ async def process_row(row, table, semaphore):
                         await upload_attachment(table, row_id, "Screenshot", screenshot_path)
                         print(f"✅ Screenshot uploaded for {url}")
 
-                    # Handle thumbnails
-                    if "Thumbnail" not in fields:
-                        print(f"🖼️ Cropping thumbnail for {url}...")
-                        await crop_image_async(screenshot_path, screenshot_path)
-                        try:
-                            thumb_path = f"screenshots/{row_id}_thumb.jpg"
-                            print(thumb_path)
-                            await upload_attachment(table, row_id, "Thumbnail", thumb_path)
-                        except:
-                            print(f"Failed to upload thumbnail for {url}")
-
-                    # Handle GIF creation if enabled
-                    if should_record_video:
-                        print(f"🎬 Creating GIF from video for {url}...")
-                        success = await crop_and_convert_to_gif_async(video_path, gif_path)
-
-                        if success:
-                            print(f"📤 Uploading GIF to Airtable for {url}...")
-                            await upload_attachment(table, row_id, "GIF", gif_path)
-                            print(f"✅ GIF uploaded for {url}")
-
-                    # Delete the video file if it exists
-                    if os.path.exists(video_path):
-                        try:
-                            os.remove(video_path)
-                            print(f"🗑️ Deleted video file: {video_path}")
-                        except Exception as e:
-                            print(f"⚠️ Could not delete video file {video_path}: {e}")
-
                     # Update the fields
                     print(f"📝 Updating fields in Airtable for {url}...")
                     updates = {
                         "Title": title,
                         "H1": h1,
-                        "Description": description,
-                        "Page Text": page_text,
+                        "Meta Description": description,
+                        "URL Content": page_text,
                         "Status": "Toai"
                     }
+
                     await update_table(table, row_id, updates)
                     print(f"✅ Fields updated for {url}, status set to 'Toai'")
 
                     if pricing_url:
                         pricing_page_text = await get_website_text_only_async(pricing_url)
-                        await update_table(table, row_id, {"Pricing Page Text": pricing_page_text})
+                        await update_table(table, row_id, {"Pricing URL Content": pricing_page_text})
 
                 except Exception as e:
                     print(f"❌ Error processing website data for {url}: {e}")
                     # Clean up files in case of error
-                    for path in [video_path, screenshot_path]:
+                    for path in [screenshot_path]:
                         if os.path.exists(path):
                             try:
                                 os.remove(path)
@@ -224,15 +188,13 @@ async def process_row(row, table, semaphore):
         finally:
             # Final cleanup - ensure files are removed if they exist
             if "Status" in fields and fields["Status"] in ["Done", "Error"]:
-                for path in [video_path]:  # Only delete video, keep screenshots and GIFs
+                for path in [screenshot_path]:  # Only delete video, keep screenshots and GIFs
                     if os.path.exists(path):
                         try:
                             os.remove(path)
                             print(f"🗑️ Final cleanup: Deleted {path}")
                         except Exception as cleanup_error:
                             print(f"⚠️ Could not delete {path} during cleanup: {cleanup_error}")
-
-        # print(f"🔚 Finished processing row {row_id}\n" + "-"*50)
 
 # Helper functions to make Airtable operations awaitable
 async def get_all_rows(table):
