@@ -16,11 +16,7 @@ def crop_image(image_path, output_path, left=0, upper=0, right=1920, lower=1200)
     try:
         img = Image.open(image_path)
         cropped_img = img.crop((left, upper, right, lower))
-        # cropped_img.thumbnail((1600,1000))
         cropped_img.save(output_path)
-        thumb_output_path = output_path.split('.')[0]+"_thumb.jpg"
-        cropped_img.thumbnail((800,500))
-        cropped_img.save(thumb_output_path)
 
         return True
 
