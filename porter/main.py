@@ -126,7 +126,7 @@ async def handle_ai_processing(table, row_id, fields):
                     base_prompt = schema.field(field.name).description
                 else:
                     logging.error(f"Base prompt not found")
-                    pass
+                    continue
 
                 logging.debug(f"{base_prompt=}")
 
