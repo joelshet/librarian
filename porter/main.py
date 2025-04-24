@@ -66,9 +66,7 @@ async def handle_website(row, table, row_id, url, fields, pricing_url):
 
     await update_table(table, row_id, {"Status": "In progress"})
     try:
-        image_path, title, h1, description, page_text = await get_website_async(url, name=row_id)
-        if image_path != screenshot_path:
-            screenshot_path = image_path
+        screenshot_path, title, h1, description, page_text = await get_website_async(url, name=row_id)
         logging.info(f"✅ Website data fetched for {url}, Title: {title[:50]}..." if title and len(title) > 50 else f"🔤 Title: {title}")
 
         await crop_image_async(screenshot_path, screenshot_path)
@@ -95,6 +93,14 @@ async def handle_website(row, table, row_id, url, fields, pricing_url):
             image_path, title, h1, description, pricing_page_text = await get_website_async(pricing_url, name=row_id)
             updates["Pricing URL Content"] = pricing_page_text
 
+            if os.path.exists(image_path):
+                try:
+                    os.remove(image_path)
+                    logging.debug(f"🗑️ Deleted local image of pricing_url after successful upload: {image_path}")
+                except Exception as e:
+                    logging.error(f"🔥 Failed to delete image of pricing_url: {image_path} after upload: {e}")
+
+
         await update_table(table, row_id, updates)
 
     except Exception as e:
@@ -107,7 +113,7 @@ async def handle_ai_processing(table, row_id, fields):
         ai_tasks, ai_field_names = [], []
 
         for field in schema.fields:
-            if field.name.startswith("AI") and field.name not in fields:
+            if field.name.startswith("AI_") and field.name not in fields:
                 description = schema.field(field.name).description
                 placeholders = re.findall(r'{([^{}]+)}', description)
                 template_str_converted = re.sub(r'{([^{}]+)}', r'${\1}', description)
