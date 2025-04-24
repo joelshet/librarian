@@ -43,9 +43,9 @@ prompt_library={
     **Input Data:**
 
     [WEBSITE_TITLE]: {Title}
-    [META_DESCRIPTION]: {Description}
+    [META_DESCRIPTION]: {Meta Description}
     [HOME_PAGE_CONTENT]: ```
-    {Page Text}
+    {URL Content}```
 
     Generate the summary now, remembering to sound like a friendly explanation based only on the provided text:
     """,
@@ -56,7 +56,7 @@ prompt_library={
     - Website Name: {Name}
     - Website H1: {H1}
     - Website: {URL}
-    - Meta description: {Description}
+    - Meta description: {Meta Description}
     Do not use marketing speak or jargon. Keep your description simple describing what it is.
     For example, a bad description would be: "Your 24/7 research agents to capture every interaction in the digital universe".
     A good description would be: "Research agents that capture interactions".
