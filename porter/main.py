@@ -119,10 +119,9 @@ async def handle_ai_processing(table, row_id, fields):
 
         for field in schema.fields:
             if field.name.startswith("AI_") and field.name not in fields:
-                print(prompt_library[field.name])
                 if field.name in prompt_library:
                     base_prompt = prompt_library[field.name]
-                elif schema.field(field.name).description:
+                elif schema.field(field.name) and schema.field(field.name).description:
                     base_prompt = schema.field(field.name).description
                 else:
                     logging.error(f"Base prompt not found")
