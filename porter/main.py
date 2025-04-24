@@ -111,15 +111,25 @@ async def handle_website(row, table, row_id, url, fields, pricing_url):
 async def handle_ai_processing(table, row_id, fields):
     logging.info(f"🤖 Starting AI processing for row {row_id}")
     try:
+        logging.debug(f"Attempting to get schema...")
         schema = await get_table_schema(table)
+        logging.debug(f"{schema}")
+
         ai_tasks, ai_field_names = [], []
 
         for field in schema.fields:
             if field.name.startswith("AI_") and field.name not in fields:
+                print(prompt_library[field.name])
                 if field.name in prompt_library:
                     base_prompt = prompt_library[field.name]
-                else:
+                elif schema.field(field.name).description:
                     base_prompt = schema.field(field.name).description
+                else:
+                    logging.error(f"Base prompt not found")
+                    pass
+
+                logging.debug(f"{base_prompt=}")
+
                 placeholders = re.findall(r'{([^{}]+)}', base_prompt)
                 template_str_converted = re.sub(r'{([^{}]+)}', r'${\1}', base_prompt)
 
@@ -133,6 +143,7 @@ async def handle_ai_processing(table, row_id, fields):
 
                 template = string.Template(template_str_converted)
                 prompt = template.safe_substitute(modified_fields)
+                logging.debug(f"{prompt=}")
 
                 ai_tasks.append(get_ai_response_async(prompt))
                 ai_field_names.append(field.name)
@@ -150,6 +161,7 @@ async def handle_ai_processing(table, row_id, fields):
 
         logging.info(f"🏁 Setting status to 'Done' for row {row_id}")
         await update_table(table, row_id, {"Status": "Done"})
+
     except Exception as e:
         logging.error(f"❌ Error processing AI for row {row_id}: {e}")
 
@@ -182,6 +194,7 @@ async def upload_attachment(table, row_id, field_name, file_path):
     return result
 
 async def get_table_schema(table):
+    logging.debug(f"Getting table schema...")
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, table.schema)
 
