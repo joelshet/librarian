@@ -12,6 +12,8 @@ from tools.get_website_async import get_website_async
 from tools.crop_image import crop_image_async
 from tools.simple_ai_async import get_ai_response_async
 
+from library.prompts import prompt_library
+
 # Parse command line arguments
 parser = argparse.ArgumentParser(description="Airtable Async Website Processor")
 parser.add_argument("--debug", action="store_true", help="Enable GIF creation for all processed websites")
@@ -114,9 +116,12 @@ async def handle_ai_processing(table, row_id, fields):
 
         for field in schema.fields:
             if field.name.startswith("AI_") and field.name not in fields:
-                description = schema.field(field.name).description
-                placeholders = re.findall(r'{([^{}]+)}', description)
-                template_str_converted = re.sub(r'{([^{}]+)}', r'${\1}', description)
+                if field.name in prompt_library:
+                    base_prompt = prompt_library[field.name]
+                else:
+                    base_prompt = schema.field(field.name).description
+                placeholders = re.findall(r'{([^{}]+)}', base_prompt)
+                template_str_converted = re.sub(r'{([^{}]+)}', r'${\1}', base_prompt)
 
                 modified_fields = {key: value for key, value in fields.items()}
                 for placeholder in placeholders:
