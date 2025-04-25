@@ -86,14 +86,14 @@ async def handle_website(row, table, row_id, url, fields, pricing_url):
         updates = {
             "Title": title,
             "H1": h1,
-            "Meta Description": description,
-            "URL Content": page_text,
+            "Meta_Description": description,
+            "URL_Content": page_text,
             "Status": "Toai"
         }
 
         if pricing_url:
             image_path, title, h1, description, pricing_page_text = await get_website_async(pricing_url, name=row_id)
-            updates["Pricing URL Content"] = pricing_page_text
+            updates["Pricing_URL_Content"] = pricing_page_text
 
             if os.path.exists(image_path):
                 try:
