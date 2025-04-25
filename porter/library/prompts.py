@@ -82,5 +82,8 @@ prompt_library={
         HR
         Operations
 
-        Only respond with the role. Do not include any other text.""",
+        Only respond with the role. Do not include any other text.
+        
+        If you cannot determine the role, respond with only "-" and nothing else.
+        """,
 }
