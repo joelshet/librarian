@@ -83,7 +83,132 @@ prompt_library={
         Operations
 
         Only respond with the role. Do not include any other text.
-        
+
         If you cannot determine the role, respond with only "-" and nothing else.
         """,
+    "AI_TAGS": """
+        Here is the content of the website for an application: {URL_Content}
+
+        Based on this content, tag the content with one of the following tags:
+
+        Market Research
+        Real Estate
+        Image Generation
+        Content Creation
+        Construction
+        E-Commerce
+        Blockchain
+        Legal
+        Multi-Agent Workflows
+        Document Analysis
+        Media
+        Databases
+        Assistant
+        Scheduling
+        Security
+        Education
+        Audio
+        Observability
+        AI Chatbot
+        Inventory Management
+        Travel
+        Inbox Management
+        SEO/SEM
+        AI
+        Data Analysis
+        Web 3
+        Model Serving
+        Data Cleaning
+        Security Compliance
+        Web Scraping
+        Coaching
+        Lead Generation
+        Frontend
+        AI Model Sharing
+        Browser Agents
+        Speech AI
+        Financial Infrastructure
+        Logistics
+        Open-Source LLMs
+        AI Infrastructure
+        Identity Verification
+        Audio AI
+        Ads
+        Contract Review
+        Consulting AI Tools
+        Operations Agents
+        Financial Services
+        Email
+        Workflow Automation
+        Trade Data Analytics
+        Language Learning
+        Web Platforms
+        Chatbot
+        Procurement
+        Robotics
+        Recruiting
+        Medical
+        APIs
+        Coding Library
+        Bookkeeping
+        Research
+        Compliance
+        ERP Automation
+        Voice AI
+        Avatar
+        Prototyping
+        Cloud Computing
+        Voice Agents
+        AI Docs
+        Web Marketing
+        Analytics
+        Sales Agent
+        Digital Workers
+        Model APIs
+        Customer Support
+        Data Enrichment
+        Copywriting
+        Coding Assistant
+        Vector Databases
+        Insurance
+        RPA
+        Digital Interaction Analytics
+        Social Media Marketing
+        Translation
+        Supply Chain Analytics
+        AI-Powered Search
+        Text-to-Speech
+        Coding Agent
+        Hiring
+        Pricing
+        Writing Tools
+        Agents Platform
+        Personal Assistant
+        Software Testing
+        Tax Automation
+        DIY/Build Your Own
+        General Purpose
+        Note-Taking
+        Predictive AI
+        Video Editing
+        CRM
+        Graphic Design
+        Productivity
+        Prompt Engineering
+        Knowledge Base
+        Web AI Agents
+        Text-to-App
+        Workflow
+        Digital Interaction Analysis
+        Video Marketing
+        AI Databases
+        Shopping
+        Virtual desktops
+        Design Tools
+        Project Management
+
+        If you cannot determine the tag, respond with only "-" and nothing else.
+
+        Only respond with the tag. Do not include any other text. Do not respond with any tags that are not on the above list.
+    """,
 }
