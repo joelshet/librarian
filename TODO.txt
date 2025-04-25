@@ -31,3 +31,12 @@
 
 [ ] Use the same chromium browser in playwright so that it can work headless=False but in the background
 - is this possible?
+
+
+
+
+
+
+### Future features
+
+[ ] Use https://exa.ai/ to 
