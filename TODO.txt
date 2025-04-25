@@ -26,6 +26,7 @@
 - get the key from the value when needed
 
 [ ] Add response validation
+- "Does this response meet these requirements? {prompt} Respond with a 1 (yes) or a 0 (no). Be strict."
 - given a set/list of values to inject in a prompt, if validation=True, then only return the response if the entire response is in the list
 - dynamically create the sets from table/row values?
 
@@ -39,4 +40,4 @@
 
 ### Future features
 
-[ ] Use https://exa.ai/ to 
+[ ] Use https://exa.ai/ to
