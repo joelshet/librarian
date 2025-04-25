@@ -1,1 +1,6 @@
+1. Problem - we shouldn't have to pushing and pulling to update prompts.
+- maybe we store the prompts in Notion? Airtable?
+- maybe we use FastHTML, deploy with Railway and just build our own prompt library UI?
 
+2. Inject global resources into prompts from both the prompt library and the column description.
+- if it's an @ with a URL, then get the contents of that URL and inject it (like Cursor)

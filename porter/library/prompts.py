@@ -65,27 +65,6 @@ prompt_library={
         Another bad example: "Makes data-driven decisions for retail and e-commerce." Don't tell me what it does. Tell me what it is.
 
         Do not start your descriptions with "AI company...". Everyone already knows it's an AI company. The goal is to describe what their product is.""",
-    "AI_ROLE": """
-        Here is the content of the website for an application: {URL Content}
-
-        Based on this content, classify the application as being useful for one of the following roles:
-        Consumer
-        Customer Support
-        Engineering
-        Product Management
-        Legal
-        Marketing
-        Design
-        Finance
-        Data
-        Sales
-        HR
-        Operations
-
-        Only respond with the role. Do not include any other text.
-
-        If you cannot determine the role, respond with only "-" and nothing else.
-        """,
     "AI_TAGS": """
         Here is the content of the website for an application: {URL_Content}
 
