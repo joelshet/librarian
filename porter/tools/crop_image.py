@@ -54,16 +54,3 @@ if __name__ == "__main__":
         print(f"Image cropped and saved to {output_path}")
     else:
         print("Image cropping failed.")
-
-    # Async usage example (uncomment to use)
-    """
-    import asyncio
-
-    async def main():
-        if await crop_image_async(image_path, output_path):
-            print(f"Image cropped asynchronously and saved to {output_path}")
-        else:
-            print("Async image cropping failed.")
-
-    asyncio.run(main())
-    """
