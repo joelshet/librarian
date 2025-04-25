@@ -114,7 +114,6 @@ prompt_library={
         Travel
         Inbox Management
         SEO/SEM
-        AI
         Data Analysis
         Web 3
         Model Serving
@@ -210,5 +209,7 @@ prompt_library={
         If you cannot determine the tag, respond with only "-" and nothing else.
 
         Only respond with the tag. Do not include any other text. Do not respond with any tags that are not on the above list.
+
+        Only respond with one tag.
     """,
 }
