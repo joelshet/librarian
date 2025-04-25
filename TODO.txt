@@ -1,6 +1,31 @@
-1. Problem - we shouldn't have to pushing and pulling to update prompts.
+[ ] Problem - we shouldn't have to pushing and pulling to update prompts.
 - maybe we store the prompts in Notion? Airtable?
 - maybe we use FastHTML, deploy with Railway and just build our own prompt library UI?
 
-2. Inject global resources into prompts from both the prompt library and the column description.
+[ ] Inject global resources into prompts from both the prompt library and the column description.
 - if it's an @ with a URL, then get the contents of that URL and inject it (like Cursor)
+
+[ ] Make it easy to add to any base(s) and any table(s)
+- add config file and parsing with sections for the bases and tables (use "--all" to run everything, otherwise use the base name)
+- default option is to only do the AI_ column functionality with @url injection
+    - try requests, if that doesn't work try playwright headless, if that doesn't work try playwright headless=False
+- instead of hard coding the column names for what to get from a website and where to save it, maybe we get the contents and pass them to the prompt?
+    - if config file for the table doesn't contain column mappings, skip those items (they can still be retrieved from a website)
+    - in many instances simply grabbing the page contents would be enough
+- maybe if an arg isn't passed with a config section to grab, then a URL isn't fetched?
+
+[ ] Add HTML > Markdown functionality
+- makes the @url injections more token friendly
+- works for the docs_page.md file generation
+- simplifies the "get website" functions to return markdown if markdown=True
+
+[ ] Update template engine to handle column names with spaces
+- create a dictionary of field names for each row with their _ companion
+- get the key from the value when needed
+
+[ ] Add response validation
+- given a set/list of values to inject in a prompt, if validation=True, then only return the response if the entire response is in the list
+- dynamically create the sets from table/row values?
+
+[ ] Use the same chromium browser in playwright so that it can work headless=False but in the background
+- is this possible?
