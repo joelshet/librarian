@@ -21,7 +21,7 @@ else:
     async_client = AsyncOpenAI(api_key=api_key)
 
 LLM_MODEL_NAME: str = os.getenv("LLM_MODEL_NAME", "gpt-3.5-turbo")
-VALIDATION_MODEL: str = os.getenv("VALIDATION_MODEL", "gpt-3.5-turbo")
+VALIDATION_MODEL: str = os.getenv("VALIDATION_MODEL", LLM_MODEL_NAME)
 print(f"Model: {LLM_MODEL_NAME}, Validation model: {VALIDATION_MODEL}")
 
 async def get_ai_response_async(prompt, model=LLM_MODEL_NAME, max_tokens=1000, temperature=0.8):
