@@ -10,7 +10,7 @@ from pyairtable.formulas import match, OR
 
 from tools.get_website_async import get_website_async
 from tools.crop_image import crop_image_async
-from tools.simple_ai_async import get_ai_response_async
+from tools.simple_ai_async import get_validated_response_async
 
 from library.prompts import prompt_library
 
@@ -144,7 +144,7 @@ async def handle_ai_processing(table, row_id, fields):
                 prompt = template.safe_substitute(modified_fields)
                 logging.debug(f"{prompt=}")
 
-                ai_tasks.append(get_ai_response_async(prompt))
+                ai_tasks.append(get_validated_response_async(prompt))
                 ai_field_names.append(field.name)
 
         if ai_tasks:
