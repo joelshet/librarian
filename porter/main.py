@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 from pyairtable import Api
 from pyairtable.formulas import match, OR
 
+from playwright.async_api import async_playwright, Playwright, Browser
+
 from tools.get_website_async import get_website_async
 from tools.crop_image import crop_image_async
 from tools.simple_ai_async import get_validated_response_async
@@ -17,9 +19,12 @@ from library.prompts import prompt_library
 # Parse command line arguments
 parser = argparse.ArgumentParser(description="Airtable Async Website Processor")
 parser.add_argument("--debug", action="store_true", help="Enable GIF creation for all processed websites")
+parser.add_argument("--delay", default=5, help="Delay between checking for rows to process (default 5 seconds)")
 args = parser.parse_args()
 
 DEBUG = args.debug
+SLEEP_INTERVAL = args.delay
+HEADLESS_MODE = False
 
 # Load environment variables
 load_dotenv()
@@ -33,6 +38,7 @@ airtable_api = Api(AIRTABLE_API_KEY)
 CONCURRENCY = int(os.getenv("PROCESSING_CONCURRENCY", 3))
 SLEEP_INTERVAL = int(os.getenv("PROCESSING_INTERVAL_SECONDS", 5))
 SCREENSHOT_DIR = os.getenv("SCREENSHOT_DIR", "screenshots")
+DEFAULT_VIEWPORT = {'width': 1920, 'height': 1920}
 
 def setup_logging(debug: bool = False):
     """Configure logging"""
@@ -43,7 +49,7 @@ def setup_logging(debug: bool = False):
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-async def process_row(row, table, semaphore):
+async def process_row(browser: Browser, context, row, table, semaphore):
     row_id = row["id"]
     fields = row.get("fields", {})
     url = fields.get("URL", "No URL")
@@ -53,7 +59,7 @@ async def process_row(row, table, semaphore):
     async with semaphore:
         try:
             if status == "Todo" and url:
-                await handle_website(row, table, row_id, url, fields, pricing_url)
+                await handle_website(browser, context, row, table, row_id, url, fields, pricing_url)
             elif status == "Toai":
                 await handle_ai_processing(table, row_id, fields)
 
@@ -62,13 +68,14 @@ async def process_row(row, table, semaphore):
             import traceback
             traceback.print_exc()
 
-async def handle_website(row, table, row_id, url, fields, pricing_url):
+async def handle_website(browser: Browser, context, row, table, row_id, url, fields, pricing_url):
     screenshot_path = f"screenshots/{row_id}.png"
     os.makedirs("screenshots", exist_ok=True)
 
     await update_table(table, row_id, {"Status": "In progress"})
+
     try:
-        screenshot_path, title, h1, description, page_text = await get_website_async(url, name=row_id)
+        screenshot_path, title, h1, description, page_text = await get_website_async(browser, context, url, name=row_id)
         logging.info(f"✅ Website data fetched for {url}, Title: {title[:50]}..." if title and len(title) > 50 else f"🔤 Title: {title}")
 
         await crop_image_async(screenshot_path, screenshot_path)
@@ -92,7 +99,7 @@ async def handle_website(row, table, row_id, url, fields, pricing_url):
         }
 
         if pricing_url:
-            image_path, title, h1, description, pricing_page_text = await get_website_async(pricing_url, name=row_id)
+            image_path, title, h1, description, pricing_page_text = await get_website_async(browser, context, pricing_url, name=row_id)
             updates["Pricing_URL_Content"] = pricing_page_text
 
             if os.path.exists(image_path):
@@ -208,31 +215,60 @@ async def main_async():
     status_counts = {status: sum(1 for row in rows if row.get("fields", {}).get("Status") == status) for status in set(row.get("fields", {}).get("Status", "Unknown") for row in rows)}
     logging.info(f"📊 Status breakdown: {status_counts}")
 
-    semaphore = asyncio.Semaphore(3)
-    tasks = [process_row(row, table, semaphore) for row in rows]
+    if rows:
+        async with async_playwright() as p: # Manages Playwright start/stop
+            browser: Browser | None = None
+            # Check if browser exists and is connected, otherwise launch/relaunch
+            if browser is None or not browser.is_connected():
+                logging.warning("Browser not found or disconnected. Launching/Relaunching...")
+                if browser: # Attempt to close previous instance if it exists
+                    try:
+                        await browser.close()
+                    except Exception as close_err:
+                        logging.error(f"Error closing previous browser instance: {close_err}")
+                try:
+                    browser = await p.chromium.launch(headless=HEADLESS_MODE)
+                    logging.info(f"✅ Browser launched! Type: {browser.browser_type.name}, Headless: {HEADLESS_MODE}")
+                except Exception as launch_err:
+                    logging.critical(f"❌ FATAL: Failed to launch browser: {launch_err}. Stopping.")
+                    raise
 
-    if tasks:
-        logging.info(f"🚀 Starting processing of {len(tasks)} rows...")
-        await asyncio.gather(*tasks)
-        logging.info(f"✅ All {len(tasks)} rows processed")
-    else:
-        logging.info("ℹ️ No rows to process")
+            # Run the main processing cycle with the active browser
+            context = await browser.new_context(viewport=DEFAULT_VIEWPORT)
 
-    logging.info("="*60)
-    logging.info("🏁 Processing cycle complete\n")
+            semaphore = asyncio.Semaphore(3)
+            tasks = [process_row(browser, context, row, table, semaphore) for row in rows]
+
+            if tasks:
+                logging.info(f"🚀 Starting processing of {len(tasks)} rows...")
+                await asyncio.gather(*tasks)
+                logging.info(f"✅ All {len(tasks)} rows processed")
+            else:
+                logging.info("ℹ️ No rows to process")
+
+            logging.info("="*60)
+            logging.info("🏁 Processing cycle complete\n")
 
 async def run_continuously():
-    logging.info("🔄 Starting continuous processing loop")
-    while True:
-        try:
-            await main_async()
-        except Exception as e:
-            logging.info(f"❌ Error in main processing cycle: {e}")
-            import traceback
-            traceback.print_exc()
+    logging.info("🔄 Starting continuous processing loop with shared browser")
+    async with async_playwright() as p: # Manages Playwright start/stop
+        browser: Browser | None = None
+        while True:
+            try:
+                await main_async()
+                await asyncio.sleep(SLEEP_INTERVAL)
 
-        logging.info("⏳ Waiting before next cycle...")
-        await asyncio.sleep(5)
+            except Exception as e:
+                logging.info(f"❌ Error in main processing cycle: {e}")
+                import traceback
+                traceback.print_exc()
+
+            # Cleanup when loop exits (e.g., on fatal error or KeyboardInterrupt)
+            if browser and browser.is_connected():
+                logging.info("🚪 Closing browser on exit...")
+                await browser.close()
+            logging.info("🛑 Continuous processing loop stopped.")
+
 
 if __name__ == "__main__":
     setup_logging(debug=DEBUG)
