@@ -236,7 +236,7 @@ async def main_async():
             # Run the main processing cycle with the active browser
             context = await browser.new_context(viewport=DEFAULT_VIEWPORT)
 
-            semaphore = asyncio.Semaphore(3)
+            semaphore = asyncio.Semaphore(7)
             tasks = [process_row(browser, context, row, table, semaphore) for row in rows]
 
             if tasks:
